@@ -171,7 +171,6 @@
                 folderEl.className = `folder-item ${isExpanded ? 'expanded' : ''} ${isActive ? 'active' : ''}`;
                 folderEl.dataset.folderId = folder.id;
                 folderEl.dataset.type = 'folder';
-                folderEl.draggable = false;
 
                 const feedsHtml = folderFeeds.map(f => renderFeedItem(f, feedUnreadCounts[f.id], false)).join('');
 
@@ -187,10 +186,11 @@
                         </div>
                         ${folderUnread > 0 ? `<span class="folder-count unread-count">${folderUnread}</span>` : ''}
                     </div>
-                    <div class="folder-feeds">${feedsHtml}</div>
+                    <div class="folder-feeds" data-folder-id="${folder.id}">${feedsHtml}</div>
                 `;
 
                 const header = folderEl.querySelector('.folder-header');
+                const folderFeedsEl = folderEl.querySelector('.folder-feeds');
 
                 header.addEventListener('click', (e) => {
                     if (e.target.closest('.drag-handle')) return;
@@ -205,16 +205,36 @@
 
                 header.addEventListener('contextmenu', (e) => showContextMenu(e, 'folder', folder.id));
                 attachDnDHandlers(header, 'folder', folder.id);
+
                 folderEl.addEventListener('dragover', (e) => handleFolderDragOver(e, folderEl));
                 folderEl.addEventListener('dragleave', (e) => handleFolderDragLeave(e, folderEl));
                 folderEl.addEventListener('drop', (e) => handleFolderDrop(e, folder.id));
 
-                folderEl.querySelectorAll('.feed-item-wrapper').forEach(item => {
-                    item.addEventListener('click', () => selectFeed(parseInt(item.dataset.feedId)));
+                folderEl.addEventListener('dragover', (e) => handleFolderItemDragOver(e, folderEl));
+                folderEl.addEventListener('dragleave', (e) => handleFolderItemDragLeave(e, folderEl));
+                folderEl.addEventListener('drop', (e) => handleFolderItemDrop(e, folderEl, folder.id));
+
+                folderFeedsEl.querySelectorAll('.feed-item-wrapper').forEach(item => {
+                    const feedId = parseInt(item.dataset.feedId);
+                    item.addEventListener('click', (e) => {
+                        if (e.target.closest('.drag-handle')) return;
+                        selectFeed(feedId);
+                    });
+                    item.addEventListener('contextmenu', (e) => showContextMenu(e, 'feed', feedId));
+                    attachDnDHandlers(item, 'feed', feedId);
+                    item.addEventListener('dragover', (e) => handleFeedDragOver(e, item));
+                    item.addEventListener('dragleave', (e) => handleFeedDragLeave(e, item));
+                    item.addEventListener('drop', (e) => handleFeedDrop(e, item, feedId));
                 });
+
+                folderFeedsEl.addEventListener('dragover', (e) => handleFeedContainerDragOver(e, folderFeedsEl, folder.id));
+                folderFeedsEl.addEventListener('drop', (e) => handleFeedContainerDrop(e, folderFeedsEl, folder.id));
 
                 folderListEl.appendChild(folderEl);
             }
+
+            folderListEl.addEventListener('dragover', (e) => handleFolderListDragOver(e, folderListEl));
+            folderListEl.addEventListener('drop', (e) => handleFolderListDrop(e, folderListEl));
 
             const feedListEl = $('#feedList');
             feedListEl.innerHTML = '';
@@ -224,9 +244,20 @@
                 const wrapper = document.createElement('div');
                 wrapper.innerHTML = renderFeedItem(f, feedUnreadCounts[f.id], true);
                 const feedEl = wrapper.firstElementChild;
-                feedEl.addEventListener('click', () => selectFeed(f.id));
+                feedEl.addEventListener('click', (e) => {
+                    if (e.target.closest('.drag-handle')) return;
+                    selectFeed(f.id);
+                });
+                feedEl.addEventListener('contextmenu', (e) => showContextMenu(e, 'feed', f.id));
+                attachDnDHandlers(feedEl, 'feed', f.id);
+                feedEl.addEventListener('dragover', (e) => handleFeedDragOver(e, feedEl));
+                feedEl.addEventListener('dragleave', (e) => handleFeedDragLeave(e, feedEl));
+                feedEl.addEventListener('drop', (e) => handleFeedDrop(e, feedEl, f.id));
                 feedListEl.appendChild(feedEl);
             }
+
+            feedListEl.addEventListener('dragover', (e) => handleFeedContainerDragOver(e, feedListEl, null));
+            feedListEl.addEventListener('drop', (e) => handleFeedContainerDrop(e, feedListEl, null));
 
             const filterSource = $('#filterSource');
             const currentVal = filterSource.value;
@@ -271,18 +302,35 @@
         if (type === 'feed') {
             const wrapper = e.target.closest('.feed-item-wrapper') || e.target.closest('[data-type="feed"]');
             wrapper?.classList.add('dragging');
+        } else if (type === 'folder') {
+            const header = e.target.closest('.folder-header') || e.target.closest('[data-type="folder"]');
+            header?.classList.add('dragging');
         }
         setTimeout(() => hideContextMenu(), 0);
     }
 
+    function clearAllDropIndicators() {
+        $$('.feed-item-wrapper').forEach(w => w.classList.remove('dragging', 'drop-above', 'drop-below'));
+        $$('.folder-item').forEach(f => f.classList.remove('drag-over', 'drop-above', 'drop-below'));
+        $$('.folder-header').forEach(h => h.classList.remove('dragging'));
+    }
+
     function handleDragEnd(e, el) {
         e.dataTransfer.clearData();
-        $$('.feed-item-wrapper').forEach(w => w.classList.remove('dragging', 'drop-above', 'drop-below'));
-        $$('.folder-item').forEach(f => f.classList.remove('drag-over'));
+        clearAllDropIndicators();
+    }
+
+    function getDragData(e) {
+        try {
+            return JSON.parse(e.dataTransfer.getData('text/plain'));
+        } catch (err) { return null; }
     }
 
     function handleFolderDragOver(e, folderEl) {
+        const data = getDragData(e);
+        if (!data || data.type !== 'feed') return;
         e.preventDefault();
+        e.stopPropagation();
         e.dataTransfer.dropEffect = 'move';
         folderEl.classList.add('drag-over');
     }
@@ -295,125 +343,212 @@
 
     async function handleFolderDrop(e, folderId) {
         e.preventDefault();
+        e.stopPropagation();
         const folderEl = e.currentTarget;
         folderEl.classList.remove('drag-over');
+        clearAllDropIndicators();
 
         try {
-            const data = JSON.parse(e.dataTransfer.getData('text/plain'));
-            if (data.type !== 'feed') return;
+            const data = getDragData(e);
+            if (!data || data.type !== 'feed') return;
 
-            await Storage.Feeds.update(data.id, { folderId: folderId });
+            const feed = await Storage.Feeds.get(data.id);
+            if (!feed) return;
+            if (feed.folderId === folderId) return;
+
+            const targetFeeds = await Storage.Feeds.getByFolder(folderId);
+            const nextOrder = targetFeeds.length > 0
+                ? Math.max(...targetFeeds.map(f => f.order ?? f.id ?? 0)) + 1
+                : 0;
+            await Storage.Feeds.update(data.id, { folderId: folderId, order: nextOrder });
             state.expandedFolders.add(folderId);
             showToast('已移动到分组', 'success');
-            await renderFoldersAndFeeds();
-        } catch (e) {
-            console.error(e);
+            await refreshAll();
+        } catch (err) {
+            console.error(err);
             showToast('移动失败', 'error');
         }
     }
 
-    document.addEventListener('DOMContentLoaded', () => {
-        $('#feedList').addEventListener('click', (e) => {
-            const action = e.target.closest('[data-action]')?.dataset.action;
-            const feedEl = e.target.closest('[data-feed-id]');
-            if (!feedEl) return;
-            const feedId = parseInt(feedEl.dataset.feedId);
-            if (action === 'edit') { e.stopPropagation(); openEditModal('feed', feedId); return; }
-            if (action === 'delete') { e.stopPropagation(); handleDeleteFeed(feedId); return; }
-        });
-
-        $('#feedList').addEventListener('contextmenu', (e) => {
-            const feedEl = e.target.closest('[data-feed-id]');
-            if (feedEl) showContextMenu(e, 'feed', parseInt(feedEl.dataset.feedId));
-        });
-
-        $('#feedList').addEventListener('dragover', (e) => handleListDragOver(e, $('#feedList')));
-        $('#feedList').addEventListener('drop', (e) => handleListDrop(e, null));
-
-        $$('.feed-item-wrapper', $('#feedList')).forEach(el => {
-            el.addEventListener('dragover', handleFeedDragOver);
-            el.addEventListener('dragleave', handleFeedDragLeave);
-            el.addEventListener('drop', handleFeedDrop);
-        });
-
-        $$('.folder-feeds').forEach(container => {
-            container.addEventListener('dragover', (e) => handleListDragOver(e, container));
-        });
-    });
-
-    function handleListDragOver(e, container) {
+    function handleFolderListDragOver(e, listEl) {
+        const data = getDragData(e);
+        if (!data || data.type !== 'folder') return;
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
     }
 
-    async function handleListDrop(e, folderId) {
-        e.preventDefault();
-        try {
-            const data = JSON.parse(e.dataTransfer.getData('text/plain'));
-            if (data.type !== 'feed') return;
-            const currentFeed = await Storage.Feeds.get(data.id);
-            if (!currentFeed) return;
-            const oldFolder = currentFeed.folderId;
-            if (oldFolder === folderId) return;
-            await Storage.Feeds.update(data.id, { folderId: folderId, order: Date.now() });
-            showToast('已移动到未分类', 'success');
-            await renderFoldersAndFeeds();
-        } catch (e) { console.error(e); }
-    }
-
-    function handleFeedDragOver(e) {
+    function handleFolderItemDragOver(e, folderEl) {
+        const data = getDragData(e);
+        if (!data || data.type !== 'folder') return;
+        const targetHeader = folderEl.querySelector('.folder-header');
+        if (!targetHeader) return;
         e.preventDefault();
         e.stopPropagation();
-        const el = e.currentTarget;
-        const rect = el.getBoundingClientRect();
+        e.dataTransfer.dropEffect = 'move';
+        const rect = targetHeader.getBoundingClientRect();
         const mid = rect.top + rect.height / 2;
-        el.classList.remove('drop-above', 'drop-below');
-        if (e.clientY < mid) el.classList.add('drop-above');
-        else el.classList.add('drop-below');
+        folderEl.classList.remove('drop-above', 'drop-below', 'drag-over');
+        if (e.clientY < mid) folderEl.classList.add('drop-above');
+        else folderEl.classList.add('drop-below');
     }
 
-    function handleFeedDragLeave(e) {
-        e.currentTarget.classList.remove('drop-above', 'drop-below');
+    function handleFolderItemDragLeave(e, folderEl) {
+        if (!folderEl.contains(e.relatedTarget)) {
+            folderEl.classList.remove('drop-above', 'drop-below');
+        }
     }
 
-    async function handleFeedDrop(e) {
+    async function handleFolderItemDrop(e, folderEl, targetFolderId) {
+        const data = getDragData(e);
+        if (!data || data.type !== 'folder') return;
         e.preventDefault();
         e.stopPropagation();
-        const targetEl = e.currentTarget;
-        const isAbove = targetEl.classList.contains('drop-above');
-        targetEl.classList.remove('drop-above', 'drop-below');
-        const targetId = parseInt(targetEl.dataset.feedId);
+        clearAllDropIndicators();
 
         try {
-            const data = JSON.parse(e.dataTransfer.getData('text/plain'));
-            if (data.type !== 'feed' || data.id === targetId) return;
+            const isAbove = folderEl.classList.contains('drop-above');
+            if (data.id === targetFolderId) return;
 
-            const [dragged, target] = await Promise.all([
-                Storage.Feeds.get(data.id),
-                Storage.Feeds.get(targetId)
-            ]);
+            const allFolders = await Storage.Folders.getAll();
+            const draggedIndex = allFolders.findIndex(f => f.id === data.id);
+            const targetIndex = allFolders.findIndex(f => f.id === targetFolderId);
+            if (draggedIndex === -1 || targetIndex === -1) return;
 
-            if (!dragged || !target) return;
-            if (dragged.folderId !== target.folderId) {
-                await Storage.Feeds.update(data.id, { folderId: target.folderId });
+            const withoutDragged = allFolders.filter(f => f.id !== data.id);
+            const dragged = allFolders[draggedIndex];
+
+            let insertIdx;
+            if (draggedIndex < targetIndex) {
+                insertIdx = isAbove ? targetIndex - 1 : targetIndex;
+            } else {
+                insertIdx = isAbove ? targetIndex : targetIndex + 1;
+            }
+            insertIdx = Math.max(0, Math.min(insertIdx, withoutDragged.length));
+
+            withoutDragged.splice(insertIdx, 0, dragged);
+
+            for (let i = 0; i < withoutDragged.length; i++) {
+                await Storage.Folders.updateOrder(withoutDragged[i].id, i);
             }
 
-            const targetFolderFeeds = await Storage.Feeds.getByFolder(target.folderId);
-            const targetIndex = targetFolderFeeds.findIndex(f => f.id === targetId);
+            showToast('分组顺序已更新', 'success');
+            await refreshAll();
+        } catch (err) {
+            console.error(err);
+            showToast('排序失败', 'error');
+        }
+    }
+
+    async function handleFolderListDrop(e, listEl) {
+        const data = getDragData(e);
+        if (!data || data.type !== 'folder') return;
+        e.preventDefault();
+        clearAllDropIndicators();
+    }
+
+    function handleFeedContainerDragOver(e, containerEl, folderId) {
+        const data = getDragData(e);
+        if (!data || data.type !== 'feed') return;
+        e.preventDefault();
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = 'move';
+    }
+
+    async function handleFeedContainerDrop(e, containerEl, folderId) {
+        const data = getDragData(e);
+        if (!data || data.type !== 'feed') return;
+        e.preventDefault();
+        e.stopPropagation();
+        clearAllDropIndicators();
+
+        try {
+            const feed = await Storage.Feeds.get(data.id);
+            if (!feed) return;
+            if (feed.folderId === folderId) return;
+
+            const targetFeeds = await Storage.Feeds.getByFolder(folderId);
+            const nextOrder = targetFeeds.length > 0
+                ? Math.max(...targetFeeds.map(f => f.order ?? f.id ?? 0)) + 1
+                : 0;
+            await Storage.Feeds.update(data.id, { folderId: folderId, order: nextOrder });
+            if (folderId) state.expandedFolders.add(folderId);
+            showToast(folderId ? '已移动到分组' : '已移动到未分类', 'success');
+            await refreshAll();
+        } catch (err) {
+            console.error(err);
+            showToast('移动失败', 'error');
+        }
+    }
+
+    function handleFeedDragOver(e, feedEl) {
+        const data = getDragData(e);
+        if (!data || data.type !== 'feed') return;
+        e.preventDefault();
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = 'move';
+        const rect = feedEl.getBoundingClientRect();
+        const mid = rect.top + rect.height / 2;
+        feedEl.classList.remove('drop-above', 'drop-below');
+        if (e.clientY < mid) feedEl.classList.add('drop-above');
+        else feedEl.classList.add('drop-below');
+    }
+
+    function handleFeedDragLeave(e, feedEl) {
+        if (!feedEl.contains(e.relatedTarget)) {
+            feedEl.classList.remove('drop-above', 'drop-below');
+        }
+    }
+
+    async function handleFeedDrop(e, targetFeedEl, targetFeedId) {
+        const data = getDragData(e);
+        if (!data || data.type !== 'feed') return;
+        e.preventDefault();
+        e.stopPropagation();
+
+        const isAbove = targetFeedEl.classList.contains('drop-above');
+        clearAllDropIndicators();
+
+        if (data.id === targetFeedId) return;
+
+        try {
+            const [dragged, target] = await Promise.all([
+                Storage.Feeds.get(data.id),
+                Storage.Feeds.get(targetFeedId)
+            ]);
+            if (!dragged || !target) return;
+
+            const targetFolderId = target.folderId;
+            const draggedFolderId = dragged.folderId;
+            const folderChanged = draggedFolderId !== targetFolderId;
+
+            if (folderChanged) {
+                await Storage.Feeds.update(data.id, { folderId: targetFolderId });
+            }
+
+            const targetFolderFeeds = await Storage.Feeds.getByFolder(targetFolderId);
             const draggedIndex = targetFolderFeeds.findIndex(f => f.id === data.id);
+            const targetIndex = targetFolderFeeds.findIndex(f => f.id === targetFeedId);
             const others = targetFolderFeeds.filter(f => f.id !== data.id);
 
             let insertIndex = isAbove ? targetIndex : targetIndex + 1;
             if (draggedIndex !== -1 && draggedIndex < targetIndex) insertIndex--;
+            if (draggedIndex === -1 && !isAbove) insertIndex = targetIndex + 1;
+            if (draggedIndex === -1 && isAbove) insertIndex = targetIndex;
+            insertIndex = Math.max(0, Math.min(insertIndex, others.length));
 
-            others.splice(insertIndex, 0, dragged);
+            const freshDragged = await Storage.Feeds.get(data.id);
+            others.splice(insertIndex, 0, freshDragged);
+
             for (let i = 0; i < others.length; i++) {
                 await Storage.Feeds.updateOrder(others[i].id, i);
             }
 
-            await renderFoldersAndFeeds();
+            if (targetFolderId) state.expandedFolders.add(targetFolderId);
+            showToast(folderChanged ? '已移动并重新排序' : '顺序已更新', 'success');
+            await refreshAll();
         } catch (err) {
             console.error(err);
+            showToast('排序失败', 'error');
         }
     }
 
@@ -600,16 +735,31 @@
         nextBtn.disabled = idx === -1 || idx >= state.currentArticleList.length - 1;
     }
 
+    async function syncReadStateUI() {
+        await Promise.all([
+            refreshNavCounts(),
+            renderFoldersAndFeeds(),
+            renderArticleList()
+        ]);
+        updateNavButtons();
+        if (state.currentArticleId) {
+            const a = await Storage.Articles.get(state.currentArticleId);
+            if (a) updateReaderToolbar(a);
+        }
+    }
+
     async function openArticle(articleId) {
         try {
             state.currentArticleId = articleId;
             const article = await Storage.Articles.get(articleId);
             if (!article) { showToast('文章不存在', 'error'); return; }
 
+            let justMarked = false;
             if (!article.isRead) {
                 await Storage.Articles.markRead(articleId, true);
-                refreshNavCounts();
-                renderFoldersAndFeeds();
+                article.isRead = true;
+                article.readAt = Date.now();
+                justMarked = true;
             }
 
             const feed = await Storage.Feeds.get(article.feedId);
@@ -641,16 +791,14 @@
             if (kw) content = highlightInHtml(content, kw);
             $('#articleBody').innerHTML = content;
 
-            const cards = $$('.article-card');
-            cards.forEach(c => {
-                c.classList.toggle('selected', parseInt(c.dataset.articleId) === articleId);
-                c.classList.toggle('unread', false);
-                c.classList.toggle('read', true);
-            });
-
             updateReaderToolbar(article);
-            renderArticleList();
-            updateNavButtons();
+
+            if (justMarked) {
+                await syncReadStateUI();
+            } else {
+                await renderArticleList();
+                updateNavButtons();
+            }
 
             $('#articleContent').scrollTop = 0;
 
@@ -796,7 +944,7 @@
             }
             closeModal();
             state.contextMenu = { type: null, id: null };
-            await Promise.all([renderFoldersAndFeeds(), renderArticleList()]);
+            await refreshAll();
         } catch (e) {
             console.error(e);
             showToast('保存失败', 'error');
@@ -1012,9 +1160,7 @@
                     return;
             }
 
-            updateReaderToolbar(article);
-            await refreshAll();
-            updateNavButtons();
+            await syncReadStateUI();
         } catch (e) {
             console.error(e);
             showToast('操作失败', 'error');
@@ -1298,10 +1444,7 @@
                 const el = $('#articleContent');
                 if (el.scrollTop > el.scrollHeight * 0.7) {
                     Storage.Articles.markRead(state.currentArticleId, true).then(() => {
-                        Storage.Articles.get(state.currentArticleId).then(a => {
-                            if (a) updateReaderToolbar(a);
-                        });
-                        refreshAll();
+                        syncReadStateUI();
                     });
                 }
             });

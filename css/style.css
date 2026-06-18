@@ -175,6 +175,25 @@ html, body {
     border: 2px dashed var(--primary-color);
 }
 
+.folder-item.drop-above::before,
+.folder-item.drop-below::after {
+    content: '';
+    position: absolute;
+    left: 4px;
+    right: 4px;
+    height: 3px;
+    background: var(--primary-color);
+    border-radius: 2px;
+    z-index: 10;
+}
+
+.folder-item.drop-above::before { top: -1px; }
+.folder-item.drop-below::after { bottom: -1px; }
+
+.folder-header.dragging {
+    opacity: 0.4;
+}
+
 .folder-item.active > .folder-header {
     background: var(--primary-light);
     color: var(--primary-color);
