@@ -48,7 +48,7 @@
 
                 <div class="nav-section">
                     <div class="nav-section-header">
-                        <span>📰 订阅源</span>
+                        <span>📰 未分类订阅</span>
                     </div>
                     <div id="feedList" class="feed-list"></div>
                 </div>
@@ -69,7 +69,7 @@
                 </div>
                 <div class="header-center">
                     <div class="search-box">
-                        <input type="text" id="searchInput" placeholder="🔍 全文搜索...">
+                        <input type="text" id="searchInput" placeholder="🔍 全文搜索... (Ctrl+K)">
                     </div>
                 </div>
                 <div class="header-right">
@@ -77,6 +77,33 @@
                     <button id="refreshBtn" class="btn btn-primary btn-sm" title="刷新所有订阅">🔄 更新</button>
                 </div>
             </header>
+
+            <div id="searchFilters" class="search-filters hidden">
+                <div class="filter-group">
+                    <span class="filter-label">筛选：</span>
+                    <div class="filter-tabs" id="filterStatus">
+                        <button class="filter-tab active" data-filter="all">全部</button>
+                        <button class="filter-tab" data-filter="unread">未读</button>
+                        <button class="filter-tab" data-filter="read">已读</button>
+                    </div>
+                </div>
+                <div class="filter-group">
+                    <label class="filter-label">来源：</label>
+                    <select id="filterSource" class="select-sm filter-select">
+                        <option value="">全部来源</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label class="filter-label">时间：</label>
+                    <select id="filterTime" class="select-sm filter-select">
+                        <option value="">全部时间</option>
+                        <option value="today">今天</option>
+                        <option value="7days">近7天</option>
+                        <option value="30days">近30天</option>
+                    </select>
+                </div>
+                <span class="filter-info" id="filterInfo"></span>
+            </div>
 
             <div class="content-area">
                 <section class="article-list-section">
@@ -105,21 +132,35 @@
                     </div>
                     <div id="readerContent" class="reader-content hidden">
                         <div class="reader-toolbar">
+                            <div class="reader-nav">
+                                <button id="prevArticleBtn" class="btn-icon" title="上一篇 (K)">← 上一篇</button>
+                                <button id="nextArticleBtn" class="btn-icon" title="下一篇 (J)">下一篇 →</button>
+                            </div>
                             <div class="reader-actions">
-                                <button id="markReadBtn" class="btn-icon" title="标记已读/未读">✓</button>
-                                <button id="starBtn" class="btn-icon" title="收藏">☆</button>
-                                <button id="readLaterBtn" class="btn-icon" title="稍后阅读">📖</button>
-                                <button id="openExternalBtn" class="btn-icon" title="在浏览器打开">↗</button>
+                                <button id="markReadBtn" class="btn-icon" title="标记已读/未读 (Enter)">
+                                    <span class="icon">✓</span>
+                                    <span class="btn-text">已读</span>
+                                </button>
+                                <button id="starBtn" class="btn-icon" title="收藏 (S)">
+                                    <span class="icon">☆</span>
+                                    <span class="btn-text">收藏</span>
+                                </button>
+                                <button id="readLaterBtn" class="btn-icon" title="稍后阅读">
+                                    <span class="icon">📖</span>
+                                    <span class="btn-text">稍后</span>
+                                </button>
+                                <button id="openExternalBtn" class="btn-icon" title="在浏览器打开 (O)">
+                                    <span class="icon">↗</span>
+                                    <span class="btn-text">原文</span>
+                                </button>
                             </div>
                             <div class="reader-controls">
                                 <div class="control-group">
-                                    <label>字号</label>
                                     <button id="fontDecBtn" class="btn-icon" title="减小字号">A-</button>
                                     <span id="fontSizeDisplay" class="control-value">16</span>
                                     <button id="fontIncBtn" class="btn-icon" title="增大字号">A+</button>
                                 </div>
                                 <div class="control-group">
-                                    <label>行距</label>
                                     <button id="lineDecBtn" class="btn-icon">窄</button>
                                     <span id="lineHeightDisplay" class="control-value">1.6</span>
                                     <button id="lineIncBtn" class="btn-icon">宽</button>
@@ -134,6 +175,8 @@
                                     <span class="dot-separator">•</span>
                                     <span id="articleDate"></span>
                                     <span class="dot-separator">•</span>
+                                    <span id="articleAuthor"></span>
+                                    <span class="dot-separator" id="authorSeparator" style="display:none">•</span>
                                     <a id="articleLink" href="#" target="_blank" rel="noopener">原文链接 ↗</a>
                                 </div>
                             </header>
@@ -145,7 +188,35 @@
         </main>
     </div>
 
+    <div id="contextMenu" class="context-menu hidden">
+        <div class="context-item" data-action="edit">✏️ 编辑名称</div>
+        <div class="context-item" data-action="markread">✓ 标记全部已读</div>
+        <div class="context-divider"></div>
+        <div class="context-item context-danger" data-action="delete">🗑️ 删除</div>
+    </div>
+
     <div id="modalContainer" class="modal-overlay hidden">
+        <div class="modal" id="editModal">
+            <div class="modal-header">
+                <h3 id="editModalTitle">编辑</h3>
+                <button class="modal-close" data-close="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label id="editModalLabel">名称</label>
+                    <input type="text" id="editModalInput" class="form-input">
+                </div>
+                <div class="form-group" id="editFolderGroup" style="display:none">
+                    <label>所属分组</label>
+                    <select id="editFolderSelect" class="form-input"></select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-close="modal">取消</button>
+                <button id="editModalSaveBtn" class="btn btn-primary">保存</button>
+            </div>
+        </div>
+
         <div class="modal" id="addFeedModal">
             <div class="modal-header">
                 <h3>添加RSS订阅</h3>
@@ -207,14 +278,14 @@
                 <hr>
                 <div class="opml-section">
                     <h4>📥 导入OPML</h4>
-                    <p>从OPML文件导入订阅源列表。</p>
+                    <p>从OPML文件导入订阅源列表。<em>（同名分组会自动合并）</em></p>
                     <input type="file" id="opmlFileInput" accept=".opml,.xml" class="form-input">
                     <button id="importOpmlBtn" class="btn btn-secondary">导入</button>
                 </div>
                 <hr>
                 <div class="opml-section">
                     <h4>💾 数据备份</h4>
-                    <p>导出完整数据（含阅读状态、收藏等），用于换设备恢复。</p>
+                    <p>导出完整数据（含阅读状态、收藏、设置），用于换设备恢复。</p>
                     <button id="exportDataBtn" class="btn btn-secondary">导出完整备份</button>
                     <input type="file" id="dataFileInput" accept=".json" class="form-input" style="margin-top:10px">
                     <button id="importDataBtn" class="btn btn-secondary">从备份恢复</button>
@@ -232,8 +303,8 @@
             </div>
             <div class="modal-body">
                 <div class="form-group">
-                    <label>自动更新间隔（分钟）</label>
-                    <input type="number" id="autoRefreshInterval" min="5" max="1440" class="form-input" value="30">
+                    <label>自动更新间隔（分钟，0关闭）</label>
+                    <input type="number" id="autoRefreshInterval" min="0" max="1440" class="form-input" value="30">
                 </div>
                 <div class="form-group">
                     <label>最大保留文章数（每个订阅源）</label>

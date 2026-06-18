@@ -212,28 +212,47 @@ ${bodyXml}  </body>
     async function importOpml(xmlString) {
         const parsed = parseOpml(xmlString);
 
-        const folders = {};
-        const uncategorized = [];
+        let createdFeeds = 0;
+        let createdFolders = 0;
+        let mergedFolders = 0;
+        let skippedFeeds = 0;
 
         async function processItems(items, parentFolderId = null) {
             for (const item of items) {
                 if (item.isFeed === false && item.name) {
-                    const folder = await Storage.Folders.create(item.name);
-                    folders[item.name] = folder.id;
+                    const existingFolder = await Storage.Folders.getByName(item.name);
+                    let folder;
+                    if (existingFolder) {
+                        folder = existingFolder;
+                        mergedFolders++;
+                    } else {
+                        folder = await Storage.Folders.create(item.name);
+                        createdFolders++;
+                    }
                     const currentFolderId = folder.id;
 
                     if (item.feeds) {
                         for (const feed of item.feeds) {
                             try {
-                                await Storage.Feeds.create({
-                                    url: feed.url,
-                                    name: feed.name,
-                                    title: feed.name,
-                                    link: feed.link,
-                                    folderId: currentFolderId
-                                });
+                                const existingFeed = await Storage.Feeds.getByUrl(feed.url);
+                                if (existingFeed) {
+                                    if (!existingFeed.folderId && currentFolderId) {
+                                        await Storage.Feeds.update(existingFeed.id, { folderId: currentFolderId });
+                                    }
+                                    skippedFeeds++;
+                                } else {
+                                    await Storage.Feeds.create({
+                                        url: feed.url,
+                                        name: feed.name,
+                                        title: feed.name,
+                                        link: feed.link,
+                                        folderId: currentFolderId
+                                    });
+                                    createdFeeds++;
+                                }
                             } catch (e) {
-                                console.warn(`跳过已存在的源: ${feed.url}`);
+                                skippedFeeds++;
+                                console.warn(`跳过源: ${feed.url} - ${e.message}`);
                             }
                         }
                     }
@@ -242,15 +261,25 @@ ${bodyXml}  </body>
                     }
                 } else if (item.isFeed) {
                     try {
-                        await Storage.Feeds.create({
-                            url: item.url,
-                            name: item.name,
-                            title: item.name,
-                            link: item.link,
-                            folderId: parentFolderId
-                        });
+                        const existingFeed = await Storage.Feeds.getByUrl(item.url);
+                        if (existingFeed) {
+                            if (!existingFeed.folderId && parentFolderId) {
+                                await Storage.Feeds.update(existingFeed.id, { folderId: parentFolderId });
+                            }
+                            skippedFeeds++;
+                        } else {
+                            await Storage.Feeds.create({
+                                url: item.url,
+                                name: item.name,
+                                title: item.name,
+                                link: item.link,
+                                folderId: parentFolderId
+                            });
+                            createdFeeds++;
+                        }
                     } catch (e) {
-                        console.warn(`跳过已存在的源: ${item.url}`);
+                        skippedFeeds++;
+                        console.warn(`跳过源: ${item.url} - ${e.message}`);
                     }
                 }
             }
@@ -258,10 +287,16 @@ ${bodyXml}  </body>
 
         await processItems(parsed);
 
-        const count = await Storage.Feeds.getAll();
+        const totalFeeds = (await Storage.Feeds.getAll()).length;
+        const totalFolders = (await Storage.Folders.getAll()).length;
+
         return {
-            feedCount: count.length,
-            folderCount: (await Storage.Folders.getAll()).length
+            createdFeeds,
+            createdFolders,
+            mergedFolders,
+            skippedFeeds,
+            feedCount: totalFeeds,
+            folderCount: totalFolders
         };
     }
 

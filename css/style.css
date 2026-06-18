@@ -16,9 +16,12 @@
     --danger-color: #ef4444;
     --unread-bg: #eff6ff;
     --star-color: #fbbf24;
+    --highlight-bg: #fef3c7;
+    --highlight-color: #92400e;
     --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
     --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
     --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+    --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1);
     --radius-sm: 6px;
     --radius-md: 10px;
     --radius-lg: 14px;
@@ -159,7 +162,7 @@ html, body {
 }
 
 .folder-item {
-    padding: 6px 12px 6px 32px;
+    padding: 4px 8px;
     border-radius: var(--radius-sm);
     cursor: pointer;
     transition: all 0.15s;
@@ -167,13 +170,15 @@ html, body {
     margin: 2px 0;
 }
 
-.folder-item:hover {
-    background: var(--bg-tertiary);
+.folder-item.drag-over {
+    background: var(--primary-light);
+    border: 2px dashed var(--primary-color);
 }
 
-.folder-item.active {
+.folder-item.active > .folder-header {
     background: var(--primary-light);
     color: var(--primary-color);
+    border-radius: var(--radius-sm);
 }
 
 .folder-header {
@@ -181,6 +186,30 @@ html, body {
     justify-content: space-between;
     align-items: center;
     gap: 6px;
+    padding: 6px 8px;
+    border-radius: var(--radius-sm);
+    position: relative;
+}
+
+.folder-header:hover {
+    background: var(--bg-tertiary);
+}
+
+.folder-header .drag-handle {
+    opacity: 0;
+    cursor: grab;
+    font-size: 12px;
+    color: var(--text-muted);
+    padding: 0 2px;
+}
+
+.folder-header:hover .drag-handle,
+.feed-item-wrapper:hover .drag-handle {
+    opacity: 1;
+}
+
+.drag-handle:active {
+    cursor: grabbing;
 }
 
 .folder-toggle {
@@ -189,11 +218,15 @@ html, body {
     font-size: 10px;
     color: var(--text-muted);
     flex-shrink: 0;
+    transition: transform 0.15s;
 }
 
 .folder-name {
     flex: 1;
     font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .folder-count {
@@ -211,73 +244,112 @@ html, body {
 .folder-actions {
     display: none;
     gap: 2px;
+    align-items: center;
 }
 
-.folder-item:hover .folder-actions {
+.folder-header:hover .folder-actions {
     display: flex;
 }
 
-.mark-folder-read {
+.mark-folder-read,
+.edit-btn,
+.delete-btn {
     background: none;
     border: none;
     cursor: pointer;
     font-size: 11px;
-    padding: 2px 6px;
+    padding: 3px 6px;
     border-radius: 4px;
     color: var(--text-muted);
+    transition: all 0.15s;
 }
 
-.mark-folder-read:hover {
+.mark-folder-read:hover,
+.edit-btn:hover {
     background: var(--primary-color);
+    color: white;
+}
+
+.delete-btn:hover {
+    background: var(--danger-color);
     color: white;
 }
 
 .folder-feeds {
     display: none;
     margin-top: 4px;
-    padding-left: 18px;
+    margin-left: 18px;
+    padding-left: 12px;
     border-left: 2px solid var(--border-color);
-    margin-left: 6px;
 }
 
 .folder-item.expanded .folder-feeds {
     display: block;
 }
 
-.feed-item {
+.feed-item-wrapper {
     display: flex;
     align-items: center;
-    padding: 6px 10px;
+    padding: 6px 8px;
     border-radius: var(--radius-sm);
     cursor: pointer;
     transition: all 0.15s;
     margin: 2px 0;
-    font-size: 13px;
+    position: relative;
+    align-items: center;
+    gap: 4px;
 }
 
-.feed-item:hover {
+.feed-item-wrapper:hover {
     background: var(--bg-tertiary);
 }
 
-.feed-item.active {
+.feed-item-wrapper.active {
     background: var(--primary-light);
     color: var(--primary-color);
+}
+
+.feed-item-wrapper.dragging {
+    opacity: 0.4;
+}
+
+.feed-item-wrapper.drop-above::before {
+    content: '';
+    position: absolute;
+    top: -2px;
+    left: 8px;
+    right: 8px;
+    height: 2px;
+    background: var(--primary-color);
+    border-radius: 1px;
+}
+
+.feed-item-wrapper.drop-below::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 8px;
+    right: 8px;
+    height: 2px;
+    background: var(--primary-color);
+    border-radius: 1px;
 }
 
 .feed-favicon {
     width: 14px;
     height: 14px;
-    margin-right: 8px;
+    margin-right: 6px;
     flex-shrink: 0;
     border-radius: 2px;
 }
 
-.feed-name {
+.feed-item-name {
     flex: 1;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     font-weight: 500;
+    font-size: 13px;
 }
 
 .feed-unread {
@@ -289,13 +361,10 @@ html, body {
     font-weight: 600;
     min-width: 18px;
     text-align: center;
+    flex-shrink: 0;
 }
 
-.feed-item.in-list {
-    padding-left: 12px;
-}
-
-.feed-list .feed-item {
+.feed-list .feed-item-wrapper {
     padding: 8px 12px;
     margin: 2px 0;
 }
@@ -352,6 +421,7 @@ html, body {
 
 .search-box {
     width: 100%;
+    position: relative;
 }
 
 .search-box input {
@@ -369,6 +439,67 @@ html, body {
     border-color: var(--primary-color);
     background: var(--bg-primary);
     box-shadow: 0 0 0 3px var(--primary-light);
+}
+
+.search-filters {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 10px 20px;
+    background: var(--bg-primary);
+    border-bottom: 1px solid var(--border-color);
+    flex-wrap: wrap;
+}
+
+.filter-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.filter-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.filter-tabs {
+    display: flex;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-sm);
+    padding: 2px;
+}
+
+.filter-tab {
+    border: none;
+    background: transparent;
+    padding: 5px 12px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text-secondary);
+    transition: all 0.15s;
+    font-weight: 500;
+}
+
+.filter-tab:hover {
+    color: var(--text-primary);
+}
+
+.filter-tab.active {
+    background: var(--bg-primary);
+    color: var(--primary-color);
+    box-shadow: var(--shadow-sm);
+}
+
+.filter-select {
+    min-width: 120px;
+}
+
+.filter-info {
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--text-muted);
 }
 
 .header-right {
@@ -440,6 +571,10 @@ html, body {
     background: var(--unread-bg);
 }
 
+.article-card.unread:hover {
+    background: #dbeafe;
+}
+
 .article-card.read {
     opacity: 0.85;
 }
@@ -477,6 +612,7 @@ html, body {
     margin-bottom: 8px;
     font-size: 12px;
     color: var(--text-muted);
+    flex-wrap: wrap;
 }
 
 .article-card-source {
@@ -496,6 +632,14 @@ html, body {
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
+}
+
+.highlight-keyword {
+    background: var(--highlight-bg);
+    color: var(--highlight-color);
+    padding: 0 2px;
+    border-radius: 2px;
+    font-weight: 500;
 }
 
 .reader-section {
@@ -551,13 +695,42 @@ html, body {
     padding: 10px 20px;
     border-bottom: 1px solid var(--border-color);
     background: var(--bg-secondary);
-    gap: 16px;
+    gap: 12px;
     flex-wrap: wrap;
+}
+
+.reader-nav {
+    display: flex;
+    gap: 4px;
+}
+
+.reader-nav .btn-icon {
+    width: auto;
+    padding: 6px 14px;
+    font-size: 13px;
+    font-weight: 500;
 }
 
 .reader-actions {
     display: flex;
     gap: 4px;
+}
+
+.reader-actions .btn-icon {
+    width: auto;
+    padding: 6px 12px;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.reader-actions .btn-icon .icon {
+    font-size: 14px;
+}
+
+.reader-actions .btn-icon .btn-text {
+    font-size: 12px;
 }
 
 .reader-controls {
@@ -740,6 +913,14 @@ html, body {
     margin: 2em 0;
 }
 
+.article-text mark,
+.article-text .highlight-keyword {
+    background: var(--highlight-bg);
+    color: var(--highlight-color);
+    padding: 0 2px;
+    border-radius: 2px;
+}
+
 .btn {
     display: inline-flex;
     align-items: center;
@@ -787,7 +968,7 @@ html, body {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 32px;
+    min-width: 32px;
     height: 32px;
     border: none;
     background: transparent;
@@ -796,6 +977,7 @@ html, body {
     font-size: 14px;
     transition: all 0.15s;
     color: var(--text-secondary);
+    font-family: inherit;
 }
 
 .btn-icon:hover {
@@ -812,8 +994,9 @@ html, body {
     color: var(--star-color);
 }
 
-.btn-icon.starred {
-    color: var(--star-color);
+.btn-icon:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
 }
 
 .select-sm {
@@ -825,6 +1008,12 @@ html, body {
     color: var(--text-primary);
     cursor: pointer;
     outline: none;
+    transition: border-color 0.15s;
+}
+
+.select-sm:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px var(--primary-light);
 }
 
 .form-input {
@@ -876,6 +1065,48 @@ html, body {
     width: 16px;
     height: 16px;
     cursor: pointer;
+    accent-color: var(--primary-color);
+}
+
+.context-menu {
+    position: fixed;
+    z-index: 5000;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-xl);
+    min-width: 160px;
+    padding: 4px;
+    animation: fadeIn 0.1s ease;
+}
+
+.context-item {
+    padding: 8px 12px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.1s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.context-item:hover {
+    background: var(--bg-tertiary);
+}
+
+.context-item.context-danger {
+    color: var(--danger-color);
+}
+
+.context-item.context-danger:hover {
+    background: #fef2f2;
+}
+
+.context-divider {
+    height: 1px;
+    background: var(--border-color);
+    margin: 4px 0;
 }
 
 .modal-overlay {
@@ -979,6 +1210,12 @@ html, body {
     margin-bottom: 12px;
 }
 
+.opml-section p em {
+    color: var(--success-color);
+    font-style: normal;
+    font-weight: 500;
+}
+
 .opml-section hr {
     margin: 16px 0;
     border: none;
@@ -1066,6 +1303,14 @@ html, body {
     .article-body {
         padding: 24px 32px;
     }
+
+    .reader-toolbar {
+        padding: 8px 12px;
+    }
+
+    .reader-actions .btn-icon .btn-text {
+        display: none;
+    }
 }
 
 @media (max-width: 768px) {
@@ -1112,12 +1357,31 @@ html, body {
         max-width: 100%;
     }
 
+    .search-filters {
+        padding: 8px 12px;
+        gap: 8px;
+    }
+
+    .filter-group {
+        flex-wrap: wrap;
+    }
+
     .article-body {
         padding: 20px;
     }
 
     .article-header h1 {
         font-size: 22px;
+    }
+
+    .reader-nav {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .reader-controls {
+        width: 100%;
+        justify-content: center;
     }
 
     .modal {

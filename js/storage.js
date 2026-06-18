@@ -132,25 +132,49 @@ const Storage = (function() {
 
     const Folders = {
         async getAll() {
-            return getAllFromStore(STORES.FOLDERS);
+            const list = await getAllFromStore(STORES.FOLDERS);
+            return list.sort((a, b) => (a.order ?? a.id) - (b.order ?? b.id));
         },
 
-        async create(name) {
+        async getByName(name) {
+            name = name.trim().toLowerCase();
+            const all = await getAllFromStore(STORES.FOLDERS);
+            return all.find(f => f.name && f.name.trim().toLowerCase() === name) || null;
+        },
+
+        async get(id) {
+            return getFromStore(STORES.FOLDERS, id);
+        },
+
+        async create(name, order) {
+            const all = await this.getAll();
+            const nextOrder = order !== undefined ? order : 
+                (all.length > 0 ? Math.max(...all.map(f => f.order ?? f.id ?? 0)) + 1 : 0);
             const folder = {
                 name: name.trim(),
+                order: nextOrder,
                 createdAt: Date.now()
             };
             const id = await putInStore(STORES.FOLDERS, folder);
             return { id, ...folder };
         },
 
-        async update(id, name) {
+        async update(id, updates) {
             const folder = await getFromStore(STORES.FOLDERS, id);
             if (!folder) return null;
-            folder.name = name.trim();
+            if (typeof updates === 'string') {
+                folder.name = updates.trim();
+            } else {
+                if (updates.name !== undefined) updates.name = updates.name.trim();
+                Object.assign(folder, updates);
+            }
             folder.updatedAt = Date.now();
             await putInStore(STORES.FOLDERS, folder);
             return folder;
+        },
+
+        async updateOrder(id, order) {
+            return this.update(id, { order });
         },
 
         async delete(id) {
@@ -160,12 +184,19 @@ const Storage = (function() {
                 await putInStore(STORES.FEEDS, feed);
             }
             return deleteFromStore(STORES.FOLDERS, id);
+        },
+
+        async findOrCreate(name) {
+            const existing = await this.getByName(name);
+            if (existing) return existing;
+            return this.create(name);
         }
     };
 
     const Feeds = {
         async getAll() {
-            return getAllFromStore(STORES.FEEDS);
+            const list = await getAllFromStore(STORES.FEEDS);
+            return list.sort((a, b) => (a.order ?? a.id) - (b.order ?? b.id));
         },
 
         async getByFolder(folderId) {
@@ -173,7 +204,8 @@ const Storage = (function() {
                 const all = await this.getAll();
                 return all.filter(f => !f.folderId);
             }
-            return getAllFromIndex(STORES.FEEDS, 'folderId', folderId);
+            const list = await getAllFromIndex(STORES.FEEDS, 'folderId', folderId);
+            return list.sort((a, b) => (a.order ?? a.id) - (b.order ?? b.id));
         },
 
         async getByUrl(url) {
@@ -190,6 +222,11 @@ const Storage = (function() {
             if (existing) {
                 throw new Error('该订阅源已存在');
             }
+            const siblingFeeds = feedData.folderId 
+                ? await this.getByFolder(feedData.folderId)
+                : (await this.getAll()).filter(f => !f.folderId);
+            const nextOrder = feedData.order !== undefined ? feedData.order :
+                (siblingFeeds.length > 0 ? Math.max(...siblingFeeds.map(f => f.order ?? f.id ?? 0)) + 1 : 0);
             const feed = {
                 url: feedData.url,
                 name: feedData.name || feedData.title || feedData.url,
@@ -198,6 +235,7 @@ const Storage = (function() {
                 link: feedData.link || feedData.url,
                 folderId: feedData.folderId || null,
                 favicon: feedData.favicon || '',
+                order: nextOrder,
                 lastFetched: null,
                 lastError: null,
                 createdAt: Date.now()
@@ -213,6 +251,10 @@ const Storage = (function() {
             feed.updatedAt = Date.now();
             await putInStore(STORES.FEEDS, feed);
             return feed;
+        },
+
+        async updateOrder(id, order) {
+            return this.update(id, { order });
         },
 
         async delete(id) {
