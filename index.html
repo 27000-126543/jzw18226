@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>本地RSS阅读器</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h1 class="app-title">📰 RSS Reader</h1>
+                <button id="addFeedBtn" class="btn btn-primary btn-sm">+ 添加订阅</button>
+            </div>
+
+            <nav class="sidebar-nav">
+                <div class="nav-section">
+                    <div class="nav-item active" data-view="all">
+                        <span class="nav-icon">📚</span>
+                        <span class="nav-label">全部文章</span>
+                        <span class="nav-count" id="countAll">0</span>
+                    </div>
+                    <div class="nav-item" data-view="unread">
+                        <span class="nav-icon">📬</span>
+                        <span class="nav-label">未读</span>
+                        <span class="nav-count" id="countUnread">0</span>
+                    </div>
+                    <div class="nav-item" data-view="starred">
+                        <span class="nav-icon">⭐</span>
+                        <span class="nav-label">收藏</span>
+                        <span class="nav-count" id="countStarred">0</span>
+                    </div>
+                    <div class="nav-item" data-view="readlater">
+                        <span class="nav-icon">📖</span>
+                        <span class="nav-label">稍后阅读</span>
+                        <span class="nav-count" id="countReadLater">0</span>
+                    </div>
+                </div>
+
+                <div class="nav-section">
+                    <div class="nav-section-header">
+                        <span>📁 订阅分组</span>
+                        <button id="addGroupBtn" class="btn-icon" title="新建分组">+</button>
+                    </div>
+                    <div id="folderList" class="folder-list"></div>
+                </div>
+
+                <div class="nav-section">
+                    <div class="nav-section-header">
+                        <span>📰 订阅源</span>
+                    </div>
+                    <div id="feedList" class="feed-list"></div>
+                </div>
+            </nav>
+
+            <div class="sidebar-footer">
+                <button id="opmlBtn" class="btn btn-secondary btn-block btn-sm">📦 OPML 导入/导出</button>
+                <button id="settingsBtn" class="btn btn-secondary btn-block btn-sm">⚙️ 设置</button>
+                <div class="last-fetch" id="lastFetch">尚未更新</div>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <header class="main-header">
+                <div class="header-left">
+                    <button id="toggleSidebar" class="btn-icon" title="切换侧边栏">☰</button>
+                    <h2 id="currentViewTitle" class="current-view-title">全部文章</h2>
+                </div>
+                <div class="header-center">
+                    <div class="search-box">
+                        <input type="text" id="searchInput" placeholder="🔍 全文搜索...">
+                    </div>
+                </div>
+                <div class="header-right">
+                    <button id="markAllReadBtn" class="btn btn-secondary btn-sm" title="全部标记已读">✓ 全部已读</button>
+                    <button id="refreshBtn" class="btn btn-primary btn-sm" title="刷新所有订阅">🔄 更新</button>
+                </div>
+            </header>
+
+            <div class="content-area">
+                <section class="article-list-section">
+                    <div class="list-toolbar">
+                        <span id="listSummary" class="list-summary">0 篇文章</span>
+                        <div class="sort-controls">
+                            <label>排序：</label>
+                            <select id="sortSelect" class="select-sm">
+                                <option value="date-desc">最新优先</option>
+                                <option value="date-asc">最早优先</option>
+                                <option value="unread-first">未读优先</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div id="articleList" class="article-list"></div>
+                </section>
+
+                <section class="reader-section">
+                    <div id="readerEmpty" class="reader-empty">
+                        <div class="empty-state">
+                            <div class="empty-icon">📖</div>
+                            <h3>选择一篇文章开始阅读</h3>
+                            <p>从左侧列表选择文章，或添加您的第一个订阅源</p>
+                            <button id="addFeedFromEmpty" class="btn btn-primary">+ 添加RSS订阅</button>
+                        </div>
+                    </div>
+                    <div id="readerContent" class="reader-content hidden">
+                        <div class="reader-toolbar">
+                            <div class="reader-actions">
+                                <button id="markReadBtn" class="btn-icon" title="标记已读/未读">✓</button>
+                                <button id="starBtn" class="btn-icon" title="收藏">☆</button>
+                                <button id="readLaterBtn" class="btn-icon" title="稍后阅读">📖</button>
+                                <button id="openExternalBtn" class="btn-icon" title="在浏览器打开">↗</button>
+                            </div>
+                            <div class="reader-controls">
+                                <div class="control-group">
+                                    <label>字号</label>
+                                    <button id="fontDecBtn" class="btn-icon" title="减小字号">A-</button>
+                                    <span id="fontSizeDisplay" class="control-value">16</span>
+                                    <button id="fontIncBtn" class="btn-icon" title="增大字号">A+</button>
+                                </div>
+                                <div class="control-group">
+                                    <label>行距</label>
+                                    <button id="lineDecBtn" class="btn-icon">窄</button>
+                                    <span id="lineHeightDisplay" class="control-value">1.6</span>
+                                    <button id="lineIncBtn" class="btn-icon">宽</button>
+                                </div>
+                            </div>
+                        </div>
+                        <article id="articleContent" class="article-body">
+                            <header class="article-header">
+                                <h1 id="articleTitle"></h1>
+                                <div class="article-meta">
+                                    <span id="articleSource" class="article-source"></span>
+                                    <span class="dot-separator">•</span>
+                                    <span id="articleDate"></span>
+                                    <span class="dot-separator">•</span>
+                                    <a id="articleLink" href="#" target="_blank" rel="noopener">原文链接 ↗</a>
+                                </div>
+                            </header>
+                            <div id="articleBody" class="article-text"></div>
+                        </article>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <div id="modalContainer" class="modal-overlay hidden">
+        <div class="modal" id="addFeedModal">
+            <div class="modal-header">
+                <h3>添加RSS订阅</h3>
+                <button class="modal-close" data-close="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>RSS/Atom 链接</label>
+                    <input type="url" id="feedUrl" placeholder="https://example.com/feed.xml" class="form-input">
+                </div>
+                <div class="form-group">
+                    <label>自定义名称（可选）</label>
+                    <input type="text" id="feedName" placeholder="留空则使用源标题" class="form-input">
+                </div>
+                <div class="form-group">
+                    <label>所属分组</label>
+                    <select id="feedFolder" class="form-input"></select>
+                </div>
+                <div id="feedPreview" class="feed-preview hidden">
+                    <div class="preview-title" id="previewTitle"></div>
+                    <div class="preview-desc" id="previewDesc"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-close="modal">取消</button>
+                <button id="validateFeedBtn" class="btn btn-secondary">验证链接</button>
+                <button id="saveFeedBtn" class="btn btn-primary">添加</button>
+            </div>
+        </div>
+
+        <div class="modal hidden" id="addGroupModal">
+            <div class="modal-header">
+                <h3>新建分组</h3>
+                <button class="modal-close" data-close="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>分组名称</label>
+                    <input type="text" id="groupName" placeholder="例如：科技新闻" class="form-input">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-close="modal">取消</button>
+                <button id="saveGroupBtn" class="btn btn-primary">创建</button>
+            </div>
+        </div>
+
+        <div class="modal hidden" id="opmlModal">
+            <div class="modal-header">
+                <h3>OPML 导入 / 导出</h3>
+                <button class="modal-close" data-close="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="opml-section">
+                    <h4>📤 导出OPML</h4>
+                    <p>将所有订阅源导出为OPML文件，方便迁移到其他阅读器。</p>
+                    <button id="exportOpmlBtn" class="btn btn-primary">导出 OPML 文件</button>
+                </div>
+                <hr>
+                <div class="opml-section">
+                    <h4>📥 导入OPML</h4>
+                    <p>从OPML文件导入订阅源列表。</p>
+                    <input type="file" id="opmlFileInput" accept=".opml,.xml" class="form-input">
+                    <button id="importOpmlBtn" class="btn btn-secondary">导入</button>
+                </div>
+                <hr>
+                <div class="opml-section">
+                    <h4>💾 数据备份</h4>
+                    <p>导出完整数据（含阅读状态、收藏等），用于换设备恢复。</p>
+                    <button id="exportDataBtn" class="btn btn-secondary">导出完整备份</button>
+                    <input type="file" id="dataFileInput" accept=".json" class="form-input" style="margin-top:10px">
+                    <button id="importDataBtn" class="btn btn-secondary">从备份恢复</button>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-close="modal">关闭</button>
+            </div>
+        </div>
+
+        <div class="modal hidden" id="settingsModal">
+            <div class="modal-header">
+                <h3>设置</h3>
+                <button class="modal-close" data-close="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>自动更新间隔（分钟）</label>
+                    <input type="number" id="autoRefreshInterval" min="5" max="1440" class="form-input" value="30">
+                </div>
+                <div class="form-group">
+                    <label>最大保留文章数（每个订阅源）</label>
+                    <input type="number" id="maxArticlesPerFeed" min="20" max="1000" class="form-input" value="200">
+                </div>
+                <div class="form-group">
+                    <label>CORS 代理（抓取外网RSS时使用）</label>
+                    <input type="text" id="corsProxy" placeholder="https://api.allorigins.win/raw?url=" class="form-input">
+                    <small class="form-hint">留空则直接请求，不使用代理。推荐代理：https://api.allorigins.win/raw?url=</small>
+                </div>
+                <div class="form-group checkbox-group">
+                    <label>
+                        <input type="checkbox" id="autoMarkRead"> 滚动阅读时自动标记已读
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-close="modal">取消</button>
+                <button id="saveSettingsBtn" class="btn btn-primary">保存设置</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toastContainer" class="toast-container"></div>
+
+    <script src="js/storage.js"></script>
+    <script src="js/parser.js"></script>
+    <script src="js/fetcher.js"></script>
+    <script src="js/opml.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
